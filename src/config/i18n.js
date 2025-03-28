@@ -72,11 +72,17 @@ const i18nConfig = {
 };
 
 // Initialize i18next
-function initializeI18n() {
-    return i18next
-        .use(Backend)
-        .use(i18nextMiddleware.LanguageDetector)
-        .init(i18nConfig);
+async function initializeI18n() {
+  try {
+    await i18next
+      .use(Backend)
+      .use(i18nextMiddleware.LanguageDetector)
+      .init(i18nConfig);
+    console.log('i18n initialized successfully');
+  } catch (err) {
+    console.error('i18n initialization failed:', err);
+    throw err; // Crash the app if i18n fails
+  }
 }
 
 // Middleware for Express

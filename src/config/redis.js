@@ -1,114 +1,121 @@
 const Redis = require('redis');
-const dotenv = require('dotenv');
-dotenv.config();
+require('dotenv').config();
 
-// Redis Configuration with Advanced Options
-const redisPassword = process.env.REDIS_PASSWORD;
+let isRedisConnected = false;
+
+// Redis Configuration
 const redisConfig = {
+  socket: {
     host: process.env.REDIS_HOST || 'localhost',
-    port: process.env.REDIS_PORT || 6379,
-    ...(redisPassword ? { password: redisPassword } : {}), // include password only if set
-    retry_strategy: (options) => {
-        if (options.error && options.error.code === 'ECONNREFUSED') {
-            return new Error('Redis server refused connection');
-        }
-        if (options.total_retry_time > 1000 * 60 * 60) {
-            return new Error('Retry time exhausted');
-        }
-        return Math.min(options.attempt * 100, 3000);
+    port: process.env.REDIS_PORT || 6379
+  },
+  ...(process.env.REDIS_PASSWORD ? { password: process.env.REDIS_PASSWORD } : {}),
+  retry_strategy: (options) => {
+    if (options.error && options.error.code === 'ECONNREFUSED') {
+      return new Error('Redis server refused connection');
     }
+    return Math.min(options.attempt * 100, 5000);
+  }
 };
 
-// Create Redis Clients with the new 'createClient' method
+// Create Redis Clients
 const publisher = Redis.createClient(redisConfig);
 const subscriber = Redis.createClient(redisConfig);
 const cache = Redis.createClient(redisConfig);
 
-// Error Handling
-publisher.on('error', (err) => console.error('Redis Publisher Error:', err));
-subscriber.on('error', (err) => console.error('Redis Subscriber Error:', err));
-cache.on('error', (err) => console.error('Redis Cache Error:', err));
-
-// Pub/Sub Communication Helper
-class RedisPubSub {
-    constructor(pub, sub) {
-        this.publisher = pub;
-        this.subscriber = sub;
-    }
-
-    // Publish a message to a channel
-    async publish(channel, message) {
-        return new Promise((resolve, reject) => {
-            this.publisher.publish(channel, JSON.stringify(message), (err, reply) => {
-                if (err) reject(err);
-                else resolve(reply);
-            });
-        });
-    }
-
-    // Subscribe to a channel
-    subscribe(channel, callback) {
-        this.subscriber.subscribe(channel);
-        this.subscriber.on('message', (subscribedChannel, message) => {
-            if (subscribedChannel === channel) {
-                callback(JSON.parse(message));
-            }
-        });
-    }
+// Event Handlers
+function setupClientEvents(client, name) {
+  client.on('connect', () => console.log(`${name} Redis connecting`));
+  client.on('ready', () => {
+    console.log(`${name} Redis ready`);
+    isRedisConnected = true;
+  });
+  client.on('error', (err) => console.error(`${name} Redis error:`, err));
+  client.on('reconnecting', () => console.log(`${name} Redis reconnecting`));
+  client.on('end', () => {
+    console.log(`${name} Redis disconnected`);
+    isRedisConnected = false;
+  });
 }
 
-// Caching Helper with Expiration
+setupClientEvents(publisher, 'Publisher');
+setupClientEvents(subscriber, 'Subscriber');
+setupClientEvents(cache, 'Cache');
+
+// Redis Cache Class
 class RedisCache {
-    constructor(client) {
-        this.client = client;
-    }
+  constructor(client) {
+    this.client = client;
+  }
 
-    // Set a cached value with optional expiration
-    async set(key, value, expirationSeconds = 3600) {
-        return new Promise((resolve, reject) => {
-            this.client.setex(key, expirationSeconds, JSON.stringify(value), (err, reply) => {
-                if (err) reject(err);
-                else resolve(reply);
-            });
-        });
-    }
-
-    // Get a cached value
-    async get(key) {
-        return new Promise((resolve, reject) => {
-            this.client.get(key, (err, reply) => {
-                if (err) reject(err);
-                else resolve(reply ? JSON.parse(reply) : null);
-            });
-        });
-    }
-
-    // Delete a cached value
-    async delete(key) {
-        return new Promise((resolve, reject) => {
-            this.client.del(key, (err, reply) => {
-                if (err) reject(err);
-                else resolve(reply);
-            });
-        });
-    }
-}
-
-// Connect to Redis
-async function connectRedis() {
+  async ensureConnected() {
     try {
-        await Promise.all([publisher.connect(), subscriber.connect(), cache.connect()]);
-        console.log('Redis connections established');
+      await this.client.ping();
+      return true;
     } catch (err) {
-        console.error('Error connecting to Redis:', err);
+      console.error('Redis connection check failed:', err);
+      return false;
     }
+  }
+
+  async get(key) {
+    if (!isRedisConnected) return null;
+    try {
+      const reply = await this.client.get(key);
+      return reply ? JSON.parse(reply) : null;
+    } catch (err) {
+      console.error('Redis GET error:', err);
+      return null;
+    }
+  }
+
+  async set(key, value, expirationSeconds = 3600) {
+    if (!isRedisConnected) return false;
+    try {
+      await this.client.setEx(key, expirationSeconds, JSON.stringify(value));
+      return true;
+    } catch (err) {
+      console.error('Redis SET error:', err);
+      return false;
+    }
+  }
+
+  async delete(key) {
+    if (!isRedisConnected) return false;
+    try {
+      await this.client.del(key);
+      return true;
+    } catch (err) {
+      console.error('Redis DEL error:', err);
+      return false;
+    }
+  }
 }
+
+// Initialize connections
+async function connectRedis() {
+  try {
+    await Promise.all([
+      publisher.connect(),
+      subscriber.connect(),
+      cache.connect()
+    ]);
+    console.log('All Redis connections established');
+    return true;
+  } catch (err) {
+    console.error('Redis connection failed:', err);
+    throw err;
+  }
+}
+
+// Singleton instance
+const redisCacheInstance = new RedisCache(cache);
 
 module.exports = {
-    publisher,
-    subscriber,
-    cache,
-    RedisPubSub: new RedisPubSub(publisher, subscriber),
-    RedisCache,
-    connectRedis
+  publisher,
+  subscriber,
+  cache,
+  redisCacheInstance,
+  connectRedis,
+  isRedisConnected
 };

@@ -1,5 +1,6 @@
-const { pool } = require('../config/db');
+const { pool, database } = require('../config/db');
 const argon2 = require('argon2');
+
 
 class User {
     static async create({
@@ -10,8 +11,7 @@ class User {
         lastName,
         phoneNumber,
         language = 'en',
-        latitude,
-        longitude,
+        location, // Expects GeoJSON format { type: "Point", coordinates: [longitude, latitude] }
         preferredCategories = []
     }) {
         const passwordHash = await argon2.hash(password);
@@ -24,17 +24,25 @@ class User {
             RETURNING 
                 id, username, email, first_name, last_name, phone_number,
                 language, preferred_categories, status,
-                ST_Y(location::geometry) as latitude,
-                ST_X(location::geometry) as longitude,
+                ST_AsGeoJSON(location) as location,
                 created_at
         `;
         
         try {
             const result = await pool.query(query, [
                 username, email, passwordHash, firstName, lastName,
-                phoneNumber, language, longitude, latitude, preferredCategories
+                phoneNumber, language, 
+                location.coordinates[0], // longitude
+                location.coordinates[1], // latitude
+                preferredCategories
             ]);
-            return result.rows[0];
+            
+            // Convert the returned location to proper GeoJSON
+            const user = result.rows[0];
+            if (user.location) {
+                user.location = JSON.parse(user.location);
+            }
+            return user;
         } catch (error) {
             if (error.code === '23505') {
                 throw new Error('Username or email already exists');
@@ -43,46 +51,46 @@ class User {
         }
     }
 
-  // Get user by email for authentication
     static async findByEmail(email) {
         const query = `
             SELECT 
                 id, username, email, password_hash, first_name, last_name,
                 phone_number, language, status, preferred_categories,
-                ST_Y(location::geometry) as latitude,
-                ST_X(location::geometry) as longitude
+                ST_AsGeoJSON(location) as location
             FROM users
             WHERE email = $1 AND status != 'deleted'
         `;
         const result = await pool.query(query, [email]);
+        if (result.rows[0] && result.rows[0].location) {
+            result.rows[0].location = JSON.parse(result.rows[0].location);
+        }
         return result.rows[0] || null;
     }
 
-  //  Get user by ID
     static async findById(id) {
         const query = `
             SELECT 
                 id, username, email, first_name, last_name, phone_number,
                 language, status, preferred_categories,
-                ST_Y(location::geometry) as latitude,
-                ST_X(location::geometry) as longitude,
+                ST_AsGeoJSON(location) as location,
                 created_at, updated_at
             FROM users
             WHERE id = $1 AND status != 'deleted'
         `;
         const result = await pool.query(query, [id]);
+        if (result.rows[0] && result.rows[0].location) {
+            result.rows[0].location = JSON.parse(result.rows[0].location);
+        }
         return result.rows[0] || null;
     }
 
-  // Update user profile
     static async updateProfile(id, updates) {
         const {
             firstName,
             lastName,
             phoneNumber,
             language,
-            latitude,
-            longitude
+            location
         } = updates;
 
         const setClauses = [];
@@ -113,9 +121,9 @@ class User {
             paramIndex++;
         }
 
-        if (latitude !== undefined && longitude !== undefined) {
+        if (location !== undefined) {
             setClauses.push(`location = ST_SetSRID(ST_MakePoint($${paramIndex}, $${paramIndex + 1}), 4326)`);
-            values.push(longitude, latitude);
+            values.push(location.coordinates[0], location.coordinates[1]);
             paramIndex += 2;
         }
 
@@ -131,99 +139,38 @@ class User {
             WHERE id = $1
             RETURNING 
                 id, username, email, first_name, last_name, phone_number,
-                language, status,
-                ST_Y(location::geometry) as latitude,
-                ST_X(location::geometry) as longitude,
+                language, status, preferred_categories,
+                ST_AsGeoJSON(location) as location,
                 updated_at
         `;
 
         const result = await pool.query(query, values);
+        if (result.rows[0] && result.rows[0].location) {
+            result.rows[0].location = JSON.parse(result.rows[0].location);
+        }
         return result.rows[0];
     }
 
-  // Update user preferences
-    static async updatePreferences(id, { latitude, longitude, preferredCategories }) {
-        const setClauses = [];
-        const values = [id];
-        let paramIndex = 2;
-
-        if (latitude !== undefined && longitude !== undefined) {
-            setClauses.push(`location = ST_SetSRID(ST_MakePoint($${paramIndex}, $${paramIndex + 1}), 4326)`);
-            values.push(longitude, latitude);
-            paramIndex += 2;
-        }
-
-        if (preferredCategories !== undefined) {
-            setClauses.push(`preferred_categories = $${paramIndex}`);
-            values.push(preferredCategories);
-            paramIndex++;
-        }
-
-        if (setClauses.length === 0) {
-            throw new Error('No preferences to update');
-        }
-
-        setClauses.push('updated_at = NOW()');
-
+    static async deleteProfile(id) {
+        // Soft delete implementation
         const query = `
             UPDATE users
-            SET ${setClauses.join(', ')}
+            SET status = 'deleted', updated_at = NOW()
             WHERE id = $1
-            RETURNING 
-                id, preferred_categories,
-                ST_Y(location::geometry) as latitude,
-                ST_X(location::geometry) as longitude,
-                updated_at
+            RETURNING id
         `;
-
-        const result = await pool.query(query, values);
-        return result.rows[0];
-    }
-
-  // Update user account status
-    static async updateStatus(id, status) {
-        const validStatuses = ['active', 'suspended', 'deleted'];
-        if (!validStatuses.includes(status)) {
-            throw new Error('Invalid status value');
-        }
-
-        const query = `
-            UPDATE users
-            SET status = $2, updated_at = NOW()
-            WHERE id = $1
-        `;
-        const result = await pool.query(query, [id, status]);
+        const result = await pool.query(query, [id]);
         return result.rowCount > 0;
     }
 
-  // Change user password
-    static async changePassword(id, currentPassword, newPassword) {
-        // First verify current password
-        const userQuery = 'SELECT password_hash FROM users WHERE id = $1';
-        const userResult = await pool.query(userQuery, [id]);
-        
-        if (userResult.rows.length === 0) {
-            throw new Error('User not found');
-        }
-
-        const validPassword = await argon2.verify(
-            userResult.rows[0].password_hash,
-            currentPassword
-        );
-        
-        if (!validPassword) {
-            throw new Error('Current password is incorrect');
-        }
-
-        // Update to new password
-        const newHash = await argon2.hash(newPassword);
-        const updateQuery = `
-            UPDATE users
-            SET password_hash = $2, updated_at = NOW()
-            WHERE id = $1
-        `;
-        const updateResult = await pool.query(updateQuery, [id, newHash]);
-        return updateResult.rowCount > 0;
+    // Additional methods using pg-promise for more complex queries
+    static async findNearbyUsers(latitude, longitude, radiusKm) {
+        return database.geo.findEventsNearby(latitude, longitude, radiusKm)
+            .then(events => events)
+            .catch(error => {
+                console.error('Error finding nearby users:', error);
+                throw error;
+            });
     }
 }
 

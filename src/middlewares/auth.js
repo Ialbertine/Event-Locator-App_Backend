@@ -1,119 +1,92 @@
 const jwt = require('jsonwebtoken');
-const { LanguageUtils } = require('../config/i18n');
-const { RedisCache } = require('../config/redis');
+const { redisCacheInstance } = require('../config/redis');
 
-class auth {
-    constructor() {
-        this.cache = new RedisCache();
+class Auth {
+  constructor() {
+    this.cache = redisCacheInstance;
+  }
+
+  authenticate = async (req, res, next) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader) {
+        return res.status(401).json({
+          success: false,
+          message: 'No authorization header provided'
+        });
+      }
+
+      const [scheme, token] = authHeader.split(' ');
+      if (!scheme || !token || !/^Bearer$/i.test(scheme)) {
+        return res.status(401).json({
+          success: false,
+          message: 'Invalid authorization format'
+        });
+      }
+
+      if (!process.env.JWT_SECRET) {
+        console.error('JWT_SECRET missing');
+        return res.status(500).json({
+          success: false,
+          message: 'Server configuration error'
+        });
+      }
+
+      // Check token blacklist
+      const isBlacklisted = await this.cache.get(`blacklist:${token}`);
+      if (isBlacklisted) {
+        return res.status(401).json({
+          success: false,
+          message: 'Token revoked'
+        });
+      }
+
+      // Verify token
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      req.user = decoded;
+      next();
+    } catch (error) {
+      console.error('Authentication error:', error);
+      res.status(401).json({
+        success: false,
+        message: 'Authentication failed',
+        error: error.message
+      });
     }
+  };
 
-    /**
-     * Verify JWT token and attach user to request
-     */
-    authenticate = async (req, res, next) => {
-        try {
-            // 1. Check for token in headers
-            const authHeader = req.headers.authorization;
-            if (!authHeader || !authHeader.startsWith('Bearer ')) {
-                return res.status(401).json({
-                    success: false,
-                    message: LanguageUtils.translate('error.unauthorized')
-                });
-            }
-
-            const token = authHeader.split(' ')[1];
-            
-            // 2. Check token in blacklist cache
-            const isBlacklisted = await this.cache.get(`blacklist:${token}`);
-            if (isBlacklisted) {
-                return res.status(401).json({
-                    success: false,
-                    message: LanguageUtils.translate('error.token_revoked')
-                });
-            }
-
-            // 3. Verify token
-            const decoded = jwt.verify(token, process.env.JWT_SECRET);
-            
-            // 4. Attach user to request
-            req.user = {
-                id: decoded.id,
-                email: decoded.email,
-                status: decoded.status,
-                role: decoded.role || 'user' // Default role if not specified
-            };
-
-            next();
-        } catch (error) {
-            if (error.name === 'TokenExpiredError') {
-                return res.status(401).json({
-                    success: false,
-                    message: LanguageUtils.translate('error.token_expired')
-                });
-            }
-            if (error.name === 'JsonWebTokenError') {
-                return res.status(401).json({
-                    success: false,
-                    message: LanguageUtils.translate('error.invalid_token')
-                });
-            }
-            next(error);
-        }
+  authorize = (roles = []) => {
+    if (typeof roles === 'string') roles = [roles];
+    
+    return (req, res, next) => {
+      if (roles.length && !roles.includes(req.user.role)) {
+        return res.status(403).json({
+          success: false,
+          message: 'Insufficient permissions'
+        });
+      }
+      next();
     };
+  };
 
-    /**
-     * Role-based access control
-     */
-    authorize = (roles = []) => {
-        if (typeof roles === 'string') {
-            roles = [roles];
+  blacklistToken = async (req, res, next) => {
+    try {
+      const token = req.headers.authorization?.split(' ')[1];
+      if (!token) return next();
+
+      const decoded = jwt.decode(token);
+      if (decoded?.exp) {
+        const expiresIn = decoded.exp - Math.floor(Date.now() / 1000);
+        if (expiresIn > 0) {
+          await this.cache.set(`blacklist:${token}`, 'true', expiresIn);
         }
-
-        return (req, res, next) => {
-            if (roles.length && !roles.includes(req.user.role)) {
-                return res.status(403).json({
-                    success: false,
-                    message: LanguageUtils.translate('error.forbidden')
-                });
-            }
-            next();
-        };
-    };
-
-    /**
-     * Check if user account is active
-     */
-    checkAccountStatus = (req, res, next) => {
-        if (req.user.status !== 'active') {
-            return res.status(403).json({
-                success: false,
-                message: LanguageUtils.translate('error.account_inactive')
-            });
-        }
-        next();
-    };
-
-    /**
-     * Token blacklisting for logout
-     */
-    blacklistToken = async (req, res, next) => {
-        try {
-            const token = req.headers.authorization?.split(' ')[1];
-            if (!token) return next();
-            
-            // Add token to blacklist with expiration matching token's remaining time
-            const decoded = jwt.decode(token);
-            const expiresIn = decoded.exp - Math.floor(Date.now() / 1000);
-            
-            if (expiresIn > 0) {
-                await this.cache.set(`blacklist:${token}`, 'true', expiresIn);
-            }
-            
-            next();
-        } catch (error) {
-            next(error);
-        }
-    };
+      }
+      next();
+    } catch (error) {
+      console.error('Token blacklist error:', error);
+      next(error);
+    }
+  };
 }
 
-module.exports = new auth();
+module.exports = new Auth();

@@ -1,39 +1,36 @@
-// Not Found (404) handler
-const notFoundHandler = (req, res, next) => {
-  const error = new Error(`Not Found - ${req.originalUrl}`);
-  res.status(404);
-  next(error);
-};
 
-// Global error handler
-const errorHandler = (err, req, res, next) => {
-  const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
-  res.status(statusCode);
-  
-  res.json({
+module.exports = (err, req, res, next) => {
+  // Log the error for server-side tracking
+  console.error('Error details:', {
       message: err.message,
-      stack: process.env.NODE_ENV === 'production' ? null : err.stack,
-      errors: err.errors || undefined
+      stack: err.stack,
+      name: err.name
   });
-};
 
-// Handle unhandled promise rejections (for use in server.js)
-const unhandledRejectionHandler = (reason, promise) => {
-  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-  // Optional: Graceful shutdown
-  process.exit(1);
-};
+  // Specific error type handling
+  if (err.name === 'ValidationError') {
+      return res.status(400).json({
+          message: 'Validation Error',
+          errors: err.errors
+      });
+  }
 
-// Handle uncaught exceptions (for use in server.js)
-const uncaughtExceptionHandler = (error) => {
-  console.error('Uncaught Exception:', error);
-  // Optional: Graceful shutdown
-  process.exit(1);
-};
+  if (err.name === 'UnauthorizedError') {
+      return res.status(401).json({
+          message: 'Unauthorized: Invalid or expired token'
+      });
+  }
 
-module.exports = {
-  notFoundHandler,
-  errorHandler,
-  unhandledRejectionHandler,
-  uncaughtExceptionHandler
+  if (err.code === '23505') {
+      return res.status(409).json({
+          message: 'Duplicate key error',
+          detail: err.detail
+      });
+  }
+
+  // Default error response
+  res.status(err.status || 500).json({
+      message: err.message || 'Internal Server Error',
+      ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+  });
 };

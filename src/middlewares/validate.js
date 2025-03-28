@@ -113,3 +113,7 @@ const validationSchemas = {
             .withMessage('New password must include uppercase, lowercase, number, and special character')
     ])
 };
+
+module.exports = {
+    validationSchemas
+}
