@@ -1,16 +1,13 @@
-// Redis Configuration for Pub/Sub and Caching
 const Redis = require('redis');
 const dotenv = require('dotenv');
-
 dotenv.config();
 
 // Redis Configuration with Advanced Options
+const redisPassword = process.env.REDIS_PASSWORD;
 const redisConfig = {
     host: process.env.REDIS_HOST || 'localhost',
     port: process.env.REDIS_PORT || 6379,
-    password: process.env.REDIS_PASSWORD || null,
-    
-    // Connection Retry Strategy
+    ...(redisPassword ? { password: redisPassword } : {}), // include password only if set
     retry_strategy: (options) => {
         if (options.error && options.error.code === 'ECONNREFUSED') {
             return new Error('Redis server refused connection');
@@ -22,7 +19,7 @@ const redisConfig = {
     }
 };
 
-// Create Redis Clients
+// Create Redis Clients with the new 'createClient' method
 const publisher = Redis.createClient(redisConfig);
 const subscriber = Redis.createClient(redisConfig);
 const cache = Redis.createClient(redisConfig);
@@ -99,12 +96,12 @@ class RedisCache {
 
 // Connect to Redis
 async function connectRedis() {
-    await Promise.all([
-        publisher.connect(),
-        subscriber.connect(),
-        cache.connect()
-    ]);
-    console.log('Redis connections established');
+    try {
+        await Promise.all([publisher.connect(), subscriber.connect(), cache.connect()]);
+        console.log('Redis connections established');
+    } catch (err) {
+        console.error('Error connecting to Redis:', err);
+    }
 }
 
 module.exports = {
@@ -112,6 +109,6 @@ module.exports = {
     subscriber,
     cache,
     RedisPubSub: new RedisPubSub(publisher, subscriber),
-    RedisCache: new RedisCache(cache),
+    RedisCache,
     connectRedis
 };

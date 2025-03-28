@@ -1,6 +1,6 @@
 // Centralized Database Configuration and Connection Management
 const { Pool } = require('pg');
-const pgPromise = require('pg-promise')();
+const pgPromise = require('pg-promise');
 const dotenv = require('dotenv');
 
 // Load environment variables
@@ -14,13 +14,12 @@ const dbConfig = {
     password: process.env.DB_PASSWORD,
     port: process.env.DB_PORT || 5432,
     
-    // Advanced Connection Pool Configuration
     max: 20,           // Maximum number of connections in pool
     idleTimeoutMillis: 30000,  // Connection timeout
     connectionTimeoutMillis: 2000,  // Time to wait for connection
     
     // PostGIS and Geospatial Extensions
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+    ssl: false
 };
 
 // Create PostgreSQL Connection Pool
@@ -99,7 +98,6 @@ async function initializeDatabase() {
       `);
 
         // Create Events Table with Geospatial Indexing
-        async function initEventsTable() {
           await pool.query(`
               CREATE TABLE IF NOT EXISTS events (
                   id SERIAL PRIMARY KEY,
@@ -118,7 +116,6 @@ async function initializeDatabase() {
                   updated_at TIMESTAMP DEFAULT NOW()
               )
           `);
-        }
 
         // Create Spatial Index for Performance
         await pool.query(`
@@ -134,14 +131,13 @@ async function initializeDatabase() {
 }
 
 // Database Connection Wrapper
-const pgp = pgPromise({
-    // Optional advanced configuration
-    extending: {
-        geo: GeoDatabaseHelper
-    }
-});
+const pgp = pgPromise(); // Now correctly initialized
 
+// Connect pg-promise with dbConfig
 const database = pgp(dbConfig);
+
+// Extend database with Geospatial Helper
+database.geo = new GeoDatabaseHelper(database);
 
 module.exports = {
     pool,
