@@ -1,252 +1,351 @@
-const { pool } = require('../db');
+const { pool } = require('../config/db');
 
 class Event {
-    static async create({ 
-        title, description, latitude, longitude, address, 
-        startTime, endTime, category, createdBy, ticketPrice = 0 
-    }) {
-        const query = `
-            INSERT INTO events (
-                title, description, location, address, 
-                start_time, end_time, category, created_by,
-                ticket_price, status
-            )
-            VALUES ($1, $2, ST_SetSRID(ST_MakePoint($3, $4), 4326), $5, $6, $7, $8, $9, $10, 'active')
-            RETURNING 
-                id, title, description, 
-                ST_X(location::geometry) as longitude,
-                ST_Y(location::geometry) as latitude,
-                address, start_time, end_time, category, 
-                created_by, ticket_price, status, created_at
-        `;
-        const values = [
-            title, description, longitude, latitude, address,
-            startTime, endTime, category, createdBy, ticketPrice
-        ];
-        
-        const result = await pool.query(query, values);
-        return result.rows[0];
+    constructor(data = {}) {
+        this.id = data.id || null;
+        this.title = data.title || '';
+        this.description = data.description || '';
+        this.location = data.location || null;
+        this.address = data.address || '';
+        this.start_time = data.start_time || null;
+        this.end_time = data.end_time || null;
+        this.category = data.category || '';
+        this.created_by = data.created_by || null;
+        this.ticket_price = data.ticket_price || 0.00;
+        this.status = data.status || 'active';
+        this.created_at = data.created_at || null;
+        this.updated_at = data.updated_at || null;
     }
+
+    // Create a new event
+    static async create(eventData) {
+        try {
+            const {
+                title, description, longitude, latitude, address,
+                start_time, end_time, category, created_by, ticket_price, status = 'active'
+            } = eventData;
+
+            const query = `
+                INSERT INTO events(
+                    title, description, location, address, 
+                    start_time, end_time, category, created_by, 
+                    ticket_price, status, created_at, updated_at
+                ) VALUES(
+                    $1, $2, ST_MakePoint($3, $4)::geography, $5, 
+                    $6, $7, $8, $9, $10, $11, NOW(), NOW()
+                ) RETURNING *;
+            `;
+
+            const values = [
+                title, description, longitude, latitude, address,
+                start_time, end_time, category, created_by, ticket_price, status
+            ];
+
+            const { rows } = await pool.query(query, values);
+            return new Event(rows[0]);
+        } catch (error) {
+            console.error('Error creating event:', error);
+            throw error;
+        }
+    }
+
+    // Get event by ID
+    static async getById(id) {
+        try {
+            const query = `
+                SELECT 
+                    id, title, description, 
+                    ST_X(location::geometry) as longitude,
+                    ST_Y(location::geometry) as latitude,
+                    address, start_time, end_time, category, 
+                    created_by, ticket_price, status, created_at, updated_at
+                FROM events
+                WHERE id = $1 AND status != 'cancelled';
+            `;
+
+            const { rows } = await pool.query(query, [id]);
+            
+            if (rows.length === 0) {
+                return null;
+            }
+            
+            return new Event(rows[0]);
+        } catch (error) {
+            console.error('Error getting event by ID:', error);
+            throw error;
+        }
+    }
+
+    // Get all events with optional filters
+    static async getAll(filters = {}) {
+        try {
+            let query = `
+                SELECT 
+                    id, title, description, 
+                    ST_X(location::geometry) as longitude,
+                    ST_Y(location::geometry) as latitude,
+                    address, start_time, end_time, category, 
+                    created_by, ticket_price, status, created_at, updated_at
+                FROM events
+                WHERE status != 'cancelled'
+            `;
+
+            const values = [];
+            let paramPosition = 1;
+
+            // Filter by category
+            if (filters.category) {
+                query += ` AND category = $${paramPosition}`;
+                values.push(filters.category);
+                paramPosition++;
+            }
+
+            // Filter by date range
+            if (filters.startDate) {
+                query += ` AND start_time >= $${paramPosition}`;
+                values.push(filters.startDate);
+                paramPosition++;
+            }
+
+            if (filters.endDate) {
+                query += ` AND end_time <= $${paramPosition}`;
+                values.push(filters.endDate);
+                paramPosition++;
+            }
+
+            // Filter by creator
+            if (filters.createdBy) {
+                query += ` AND created_by = $${paramPosition}`;
+                values.push(filters.createdBy);
+                paramPosition++;
+            }
+
+            // Add order by clause
+            query += ' ORDER BY start_time ASC';
+
+            // Add pagination
+            if (filters.limit) {
+                query += ` LIMIT $${paramPosition}`;
+                values.push(filters.limit);
+                paramPosition++;
+
+                if (filters.offset) {
+                    query += ` OFFSET $${paramPosition}`;
+                    values.push(filters.offset);
+                    paramPosition++;
+                }
+            }
+
+            const { rows } = await pool.query(query, values);
+            return rows.map(row => new Event(row));
+        } catch (error) {
+            console.error('Error getting all events:', error);
+            throw error;
+        }
+    }
+
+    // Find events nearby a location within a radius
     static async findNearby(latitude, longitude, radiusKm, filters = {}) {
-        let query = `
-            SELECT 
-                e.id, e.title, e.description, 
-                ST_X(e.location::geometry) as longitude,
-                ST_Y(e.location::geometry) as latitude,
-                e.address,
-                ST_DistanceSphere(
-                    e.location, 
-                    ST_MakePoint($1, $2)
-                ) / 1000 as distance,
-                e.start_time, e.end_time, e.category,
-                e.ticket_price, e.status,
-                u.username as creator_name
-            FROM events e
-            JOIN users u ON e.created_by = u.id
-            WHERE ST_DWithin(
-                e.location::geography, 
-                ST_MakePoint($1, $2)::geography, 
-                $3 * 1000
-            )
-        `;
-        
-        const values = [longitude, latitude, radiusKm];
-        let paramIndex = 4;
-        
-        // Apply filters
-        if (filters.category) {
-            query += ` AND e.category = $${paramIndex}`;
-            values.push(filters.category);
-            paramIndex++;
+        try {
+            let query = `
+                SELECT 
+                    id, title, description, 
+                    ST_X(location::geometry) as longitude,
+                    ST_Y(location::geometry) as latitude,
+                    address, start_time, end_time, category, 
+                    created_by, ticket_price, status, created_at, updated_at,
+                    ST_DistanceSphere(
+                        location, 
+                        ST_MakePoint($1, $2)
+                    ) / 1000 as distance_km
+                FROM events
+                WHERE ST_DWithin(
+                    location::geography, 
+                    ST_MakePoint($1, $2)::geography, 
+                    $3 * 1000
+                )
+                AND status != 'cancelled'
+            `;
+
+            const values = [longitude, latitude, radiusKm];
+            let paramPosition = 4;
+
+            // Filter by category
+            if (filters.category) {
+                query += ` AND category = $${paramPosition}`;
+                values.push(filters.category);
+                paramPosition++;
+            }
+
+            // Filter by date range
+            if (filters.startDate) {
+                query += ` AND start_time >= $${paramPosition}`;
+                values.push(filters.startDate);
+                paramPosition++;
+            }
+
+            if (filters.endDate) {
+                query += ` AND end_time <= $${paramPosition}`;
+                values.push(filters.endDate);
+                paramPosition++;
+            }
+
+            // Add order by distance
+            query += ' ORDER BY distance_km ASC';
+
+            // Add pagination
+            if (filters.limit) {
+                query += ` LIMIT $${paramPosition}`;
+                values.push(filters.limit);
+                paramPosition++;
+
+                if (filters.offset) {
+                    query += ` OFFSET $${paramPosition}`;
+                    values.push(filters.offset);
+                }
+            }
+
+            const { rows } = await pool.query(query, values);
+            return rows.map(row => ({
+                ...new Event(row),
+                distance_km: row.distance_km
+            }));
+        } catch (error) {
+            console.error('Error finding nearby events:', error);
+            throw error;
         }
-        
-        if (filters.maxPrice !== undefined) {
-            query += ` AND e.ticket_price <= $${paramIndex}`;
-            values.push(filters.maxPrice);
-            paramIndex++;
-        }
-        
-        if (filters.startDate) {
-            query += ` AND e.start_time >= $${paramIndex}`;
-            values.push(filters.startDate);
-            paramIndex++;
-        }
-        
-        if (filters.endDate) {
-            query += ` AND e.end_time <= $${paramIndex}`;
-            values.push(filters.endDate);
-            paramIndex++;
-        }
-        
-        // Default to active events if no status specified
-        query += ` AND e.status = $${paramIndex}`;
-        values.push(filters.status || 'active');
-        paramIndex++;
-        
-        query += ' ORDER BY distance';
-        
-        const result = await pool.query(query, values);
-        return result.rows;
     }
 
-    /**
-     * Update an event
-     * @param {number} eventId 
-     * @param {object} updates 
-     * @returns {Promise<object>} Updated event
-     */
-    static async update(eventId, updates) {
-        const { 
-            title, description, latitude, longitude, address,
-            startTime, endTime, category, ticketPrice, status
-        } = updates;
-        
-        const setClauses = [];
-        const values = [eventId];
-        let paramIndex = 2;
-        
-        if (title !== undefined) {
-            setClauses.push(`title = $${paramIndex}`);
-            values.push(title);
-            paramIndex++;
+    // Update an event
+    static async update(id, eventData) {
+        try {
+            const updateFields = [];
+            const values = [];
+            let paramPosition = 1;
+
+            // Build update fields
+            for (const [key, value] of Object.entries(eventData)) {
+                // Skip id field and handle location separately
+                if (key === 'id') continue;
+                if (key === 'longitude' || key === 'latitude') continue;
+
+                updateFields.push(`${key} = $${paramPosition}`);
+                values.push(value);
+                paramPosition++;
+            }
+
+            // Handle location update
+            if (eventData.longitude && eventData.latitude) {
+                updateFields.push(`location = ST_MakePoint($${paramPosition}, $${paramPosition + 1})::geography`);
+                values.push(eventData.longitude, eventData.latitude);
+                paramPosition += 2;
+            }
+
+            // Add updated_at timestamp
+            updateFields.push(`updated_at = NOW()`);
+
+            // Add the ID as the last parameter
+            values.push(id);
+
+            const query = `
+                UPDATE events
+                SET ${updateFields.join(', ')}
+                WHERE id = $${paramPosition}
+                RETURNING *;
+            `;
+
+            const { rows } = await pool.query(query, values);
+            
+            if (rows.length === 0) {
+                return null;
+            }
+            
+            return new Event(rows[0]);
+        } catch (error) {
+            console.error('Error updating event:', error);
+            throw error;
         }
-        
-        if (description !== undefined) {
-            setClauses.push(`description = $${paramIndex}`);
-            values.push(description);
-            paramIndex++;
-        }
-        
-        if (latitude !== undefined && longitude !== undefined) {
-            setClauses.push(`location = ST_SetSRID(ST_MakePoint($${paramIndex}, $${paramIndex + 1}), 4326)`);
-            values.push(longitude, latitude);
-            paramIndex += 2;
-        }
-        
-        if (address !== undefined) {
-            setClauses.push(`address = $${paramIndex}`);
-            values.push(address);
-            paramIndex++;
-        }
-        
-        if (startTime !== undefined) {
-            setClauses.push(`start_time = $${paramIndex}`);
-            values.push(startTime);
-            paramIndex++;
-        }
-        
-        if (endTime !== undefined) {
-            setClauses.push(`end_time = $${paramIndex}`);
-            values.push(endTime);
-            paramIndex++;
-        }
-        
-        if (category !== undefined) {
-            setClauses.push(`category = $${paramIndex}`);
-            values.push(category);
-            paramIndex++;
-        }
-        
-        if (ticketPrice !== undefined) {
-            setClauses.push(`ticket_price = $${paramIndex}`);
-            values.push(ticketPrice);
-            paramIndex++;
-        }
-        
-        if (status !== undefined) {
-            setClauses.push(`status = $${paramIndex}`);
-            values.push(status);
-        }
-        
-        if (setClauses.length === 0) {
-            throw new Error('No updates provided');
-        }
-        
-        // Add updated_at timestamp
-        setClauses.push('updated_at = NOW()');
-        
-        const query = `
-            UPDATE events
-            SET ${setClauses.join(', ')}
-            WHERE id = $1
-            RETURNING 
-                id, title, description, 
-                ST_X(location::geometry) as longitude,
-                ST_Y(location::geometry) as latitude,
-                address, start_time, end_time, category, 
-                created_by, ticket_price, status, updated_at
-        `;
-        
-        const result = await pool.query(query, values);
-        return result.rows[0];
     }
 
-    /**
-     * Cancel an event (set status to 'cancelled')
-     * @param {number} eventId 
-     * @returns {Promise<boolean>} Success status
-     */
-    static async cancel(eventId) {
-        const query = `
-            UPDATE events
-            SET status = 'cancelled', updated_at = NOW()
-            WHERE id = $1
-        `;
-        const result = await pool.query(query, [eventId]);
-        return result.rowCount > 0;
-    }
+    // Delete an event (soft delete by changing status)
+    static async delete(id) {
+        try {
+            const query = `
+                UPDATE events
+                SET status = 'cancelled', updated_at = NOW()
+                WHERE id = $1
+                RETURNING *;
+            `;
 
-    /**
-     * Get event by ID
-     * @param {number} id 
-     * @returns {Promise<object>} Event details
-     */
-    static async findById(id) {
-        const query = `
-            SELECT 
-                e.id, e.title, e.description, 
-                ST_X(e.location::geometry) as longitude,
-                ST_Y(e.location::geometry) as latitude,
-                e.address, e.start_time, e.end_time, 
-                e.category, e.created_by, e.ticket_price, e.status,
-                u.username as creator_name
-            FROM events e
-            JOIN users u ON e.created_by = u.id
-            WHERE e.id = $1
-        `;
-        const result = await pool.query(query, [id]);
-        return result.rows[0];
-    }
-
-    /**
-     * Get events by creator
-     * @param {number} userId 
-     * @param {string} [status] - Filter by status
-     * @returns {Promise<array>} Array of events
-     */
-    static async findByCreator(userId, status) {
-        let query = `
-            SELECT 
-                id, title, description, 
-                ST_X(location::geometry) as longitude,
-                ST_Y(location::geometry) as latitude,
-                address, start_time, end_time, 
-                category, ticket_price, status, created_at
-            FROM events
-            WHERE created_by = $1
-        `;
-        
-        const values = [userId];
-        
-        if (status) {
-            query += ' AND status = $2';
-            values.push(status);
+            const { rows } = await pool.query(query, [id]);
+            
+            if (rows.length === 0) {
+                return false;
+            }
+            
+            return true;
+        } catch (error) {
+            console.error('Error deleting event:', error);
+            throw error;
         }
-        
-        query += ' ORDER BY start_time';
-        
-        const result = await pool.query(query, values);
-        return result.rows;
+    }
+
+    // Get event categories
+    static async getCategories() {
+        try {
+            const query = `
+                SELECT DISTINCT category
+                FROM events
+                WHERE status != 'cancelled'
+                ORDER BY category;
+            `;
+
+            const { rows } = await pool.query(query);
+            return rows.map(row => row.category);
+        } catch (error) {
+            console.error('Error getting event categories:', error);
+            throw error;
+        }
+    }
+
+    // Count events with filters
+    static async count(filters = {}) {
+        try {
+            let query = `
+                SELECT COUNT(*) as total
+                FROM events
+                WHERE status != 'cancelled'
+            `;
+
+            const values = [];
+            let paramPosition = 1;
+
+            // Filter by category
+            if (filters.category) {
+                query += ` AND category = $${paramPosition}`;
+                values.push(filters.category);
+                paramPosition++;
+            }
+
+            // Filter by date range
+            if (filters.startDate) {
+                query += ` AND start_time >= $${paramPosition}`;
+                values.push(filters.startDate);
+                paramPosition++;
+            }
+
+            if (filters.endDate) {
+                query += ` AND end_time <= $${paramPosition}`;
+                values.push(filters.endDate);
+                paramPosition++;
+            }
+
+            const { rows } = await pool.query(query, values);
+            return parseInt(rows[0].total);
+        } catch (error) {
+            console.error('Error counting events:', error);
+            throw error;
+        }
     }
 }
 

@@ -7,6 +7,7 @@ const { initializeDatabase } = require('./config/db');
 const { initializeI18n, i18nMiddleware } = require('./config/i18n');
 const { connectRedis, redisCacheInstance } = require('./config/redis');
 const userRoutes = require('./routes/userRoutes');
+const eventRoutes = require('./routes/eventRoutes');
 
 const app = express();
 
@@ -58,6 +59,7 @@ app.get('/health', async (req, res) => {
 // Routes
 app.get('/', (req, res) => res.send('Server is running'));
 app.use('/api/users', userRoutes);
+app.use('/api/events', eventRoutes);
 
 // Error Handling
 app.use(require('./middlewares/errorHandler'));
