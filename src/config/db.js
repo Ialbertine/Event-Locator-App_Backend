@@ -14,11 +14,11 @@ const dbConfig = {
     password: process.env.DB_PASSWORD,
     port: process.env.DB_PORT || 5432,
     
-    max: 20,           // Maximum number of connections in pool
-    idleTimeoutMillis: 30000,  // Connection timeout
-    connectionTimeoutMillis: 2000,  // Time to wait for connection
+    max: 20,         
+    idleTimeoutMillis: 30000, 
+    connectionTimeoutMillis: 2000, 
     
-    // PostGIS and Geospatial Extensions
+    // PostGIS and Geospatial 
     ssl: false
 };
 
@@ -31,7 +31,7 @@ pool.on('error', (err) => {
     process.exit(-1);
 });
 
-// Advanced Geospatial Query Helper
+// Geospatial Query 
 class GeoDatabaseHelper {
     constructor(connection) {
         this.connection = connection;
@@ -131,7 +131,7 @@ async function initializeDatabase() {
 }
 
 // Database Connection Wrapper
-const pgp = pgPromise(); // Now correctly initialized
+const pgp = pgPromise(); 
 
 // Connect pg-promise with dbConfig
 const database = pgp(dbConfig);

@@ -1,3 +1,5 @@
+// Update to your config/i18n.js file
+
 const i18next = require('i18next');
 const i18nextMiddleware = require('i18next-http-middleware');
 const Backend = require('i18next-fs-backend');
@@ -14,7 +16,23 @@ const resources = {
             },
             events: {
                 created: "Event created successfully",
-                notFound: "No events found"
+                notFound: "No events found",
+                updated: "Event updated successfully",
+                reminder: "Reminder: {{event}} is starting at {{time}}",
+                cancelled: "Event cancelled",
+                updated: "Event {{event}} has been updated: {{changes}} changed"
+            },
+            notifications: {
+                notFound: "Notification not found",
+                allMarkedAsRead: "All notifications marked as read",
+                deleted: "Notification deleted",
+                created: "Notification created"
+            },
+            validation: {
+                missingFields: "Required fields missing"
+            },
+            auth: {
+                forbidden: "Forbidden - You do not have permission to perform this action"
             }
         }
     },
@@ -27,7 +45,23 @@ const resources = {
             },
             events: {
                 created: "Evento creado exitosamente",
-                notFound: "No se encontraron eventos"
+                notFound: "No se encontraron eventos",
+                updated: "Evento actualizado con éxito",
+                reminder: "Recordatorio: {{event}} comienza a las {{time}}",
+                cancelled: "Evento cancelado",
+                updated: "El evento {{event}} ha sido actualizado: {{changes}} cambiados"
+            },
+            notifications: {
+                notFound: "Notificación no encontrada",
+                allMarkedAsRead: "Todas las notificaciones marcadas como leídas",
+                deleted: "Notificación eliminada",
+                created: "Notificación creada"
+            },
+            validation: {
+                missingFields: "Faltan campos requeridos"
+            },
+            auth: {
+                forbidden: "Prohibido - No tienes permiso para realizar esta acción"
             }
         }
     },
@@ -40,7 +74,23 @@ const resources = {
             },
             events: {
                 created: "Événement créé avec succès",
-                notFound: "Aucun événement trouvé"
+                notFound: "Aucun événement trouvé",
+                updated: "Événement mis à jour avec succès",
+                reminder: "Rappel: {{event}} commence à {{time}}",
+                cancelled: "Événement annulé",
+                updated: "L'événement {{event}} a été mis à jour: {{changes}} modifiés"
+            },
+            notifications: {
+                notFound: "Notification introuvable",
+                allMarkedAsRead: "Toutes les notifications marquées comme lues",
+                deleted: "Notification supprimée",
+                created: "Notification créée"
+            },
+            validation: {
+                missingFields: "Champs obligatoires manquants"
+            },
+            auth: {
+                forbidden: "Interdit - Vous n'avez pas la permission d'effectuer cette action"
             }
         }
     }
@@ -81,7 +131,7 @@ async function initializeI18n() {
     console.log('i18n initialized successfully');
   } catch (err) {
     console.error('i18n initialization failed:', err);
-    throw err; // Crash the app if i18n fails
+    throw err;
   }
 }
 

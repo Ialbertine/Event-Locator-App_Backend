@@ -1,4 +1,3 @@
-require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -8,6 +7,8 @@ const { initializeI18n, i18nMiddleware } = require('./config/i18n');
 const { connectRedis, redisCacheInstance } = require('./config/redis');
 const userRoutes = require('./routes/userRoutes');
 const eventRoutes = require('./routes/eventRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
+const createNotificationsTable = require('./migrations/notificationTable'); 
 
 const app = express();
 
@@ -17,6 +18,11 @@ async function initializeApp() {
     console.log('[Init] Starting database...');
     await initializeDatabase();
     console.log('[Init] Database OK');
+    
+    // Create notifications table
+    console.log('[Init] Creating notifications table...');
+    await createNotificationsTable();
+    console.log('[Init] Notifications table OK');
 
     console.log('[Init] Connecting to Redis...');
     await connectRedis();
@@ -29,6 +35,11 @@ async function initializeApp() {
     console.log('[Init] Initializing i18n...');
     await initializeI18n();
     console.log('[Init] i18n OK');
+    
+    // Load notification service
+    console.log('[Init] Setting up notification service...');
+    require('./services/notificationService');
+    console.log('[Init] Notification service OK');
   } catch (err) {
     console.error('[Init] FAILED:', {
       message: err.message,
@@ -60,6 +71,7 @@ app.get('/health', async (req, res) => {
 app.get('/', (req, res) => res.send('Server is running'));
 app.use('/api/users', userRoutes);
 app.use('/api/events', eventRoutes);
+app.use('/api/notifications', notificationRoutes); 
 
 // Error Handling
 app.use(require('./middlewares/errorHandler'));

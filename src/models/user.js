@@ -11,7 +11,7 @@ class User {
         lastName,
         phoneNumber,
         language = 'en',
-        location, // Expects GeoJSON format { type: "Point", coordinates: [longitude, latitude] }
+        location, 
         preferredCategories = []
     }) {
         const passwordHash = await argon2.hash(password);
