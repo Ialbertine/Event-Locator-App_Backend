@@ -1,4 +1,3 @@
-// Centralized Database Configuration and Connection Management
 const { Pool } = require('pg');
 const pgPromise = require('pg-promise');
 const dotenv = require('dotenv');
@@ -50,12 +49,13 @@ class GeoDatabaseHelper {
     }
 
     // Find events within a specific radius
-    async findEventsNearby(latitude, longitude, radiusKm) {
-        const query = `
+    async findEventsNearby(latitude, longitude, radiusKm, createdBy = null) {
+        let query = `
             SELECT 
                 id, name, description, 
                 ST_X(location::geometry) as longitude,
                 ST_Y(location::geometry) as latitude,
+                created_by,
                 ST_DistanceSphere(
                     location, 
                     ST_MakePoint($1, $2)
@@ -66,9 +66,20 @@ class GeoDatabaseHelper {
                 ST_MakePoint($1, $2)::geography, 
                 $3 * 1000
             )
-            ORDER BY distance
+            AND status != 'cancelled'
         `;
-        return this.connection.any(query, [longitude, latitude, radiusKm]);
+        
+        const params = [longitude, latitude, radiusKm];
+        
+        // Add filter for created_by if provided
+        if (createdBy) {
+            query += ` AND created_by = $4`;
+            params.push(createdBy);
+        }
+        
+        query += ` ORDER BY distance`;
+        
+        return this.connection.any(query, params);
     }
 }
 
@@ -90,6 +101,7 @@ async function initializeDatabase() {
               phone_number VARCHAR(20),
               language VARCHAR(10) DEFAULT 'en',
               status VARCHAR(20) DEFAULT 'active',
+              role VARCHAR(20) NOT NULL DEFAULT 'user',
               location GEOGRAPHY(Point, 4326),
               preferred_categories TEXT[] DEFAULT '{}',
               created_at TIMESTAMP DEFAULT NOW(),
@@ -97,30 +109,36 @@ async function initializeDatabase() {
           )
       `);
 
-        // Create Events Table with Geospatial Indexing
-          await pool.query(`
-              CREATE TABLE IF NOT EXISTS events (
-                  id SERIAL PRIMARY KEY,
-                  title VARCHAR(100) NOT NULL,
-                  description TEXT,
-                  location GEOGRAPHY(Point, 4326),
-                  address TEXT NOT NULL,
-                  start_time TIMESTAMP NOT NULL,
-                  end_time TIMESTAMP NOT NULL,
-                  category VARCHAR(50) NOT NULL,
-                  created_by INTEGER REFERENCES users(id),
-                  ticket_price DECIMAL(10, 2) DEFAULT 0,
-                  status VARCHAR(20) NOT NULL DEFAULT 'active'
-                      CHECK (status IN ('active', 'cancelled', 'completed')),
-                  created_at TIMESTAMP DEFAULT NOW(),
-                  updated_at TIMESTAMP DEFAULT NOW()
-              )
-          `);
+        // Create Events Table with Geospatial Indexing and created_by reference
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS events (
+                id SERIAL PRIMARY KEY,
+                title VARCHAR(100) NOT NULL,
+                description TEXT,
+                location GEOGRAPHY(Point, 4326),
+                address TEXT NOT NULL,
+                start_time TIMESTAMP NOT NULL,
+                end_time TIMESTAMP NOT NULL,
+                category VARCHAR(50) NOT NULL,
+                created_by INTEGER REFERENCES users(id) NOT NULL,
+                ticket_price DECIMAL(10, 2) DEFAULT 0,
+                status VARCHAR(20) NOT NULL DEFAULT 'active'
+                    CHECK (status IN ('active', 'cancelled', 'completed')),
+                created_at TIMESTAMP DEFAULT NOW(),
+                updated_at TIMESTAMP DEFAULT NOW()
+            )
+        `);
 
         // Create Spatial Index for Performance
         await pool.query(`
             CREATE INDEX IF NOT EXISTS idx_events_location 
             ON events USING GIST(location)
+        `);
+        
+        // Create Index for created_by for faster owner-based queries
+        await pool.query(`
+            CREATE INDEX IF NOT EXISTS idx_events_created_by
+            ON events(created_by)
         `);
 
         console.log('Database initialized successfully');

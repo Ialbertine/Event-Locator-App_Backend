@@ -10,6 +10,7 @@ class Event {
         this.start_time = data.start_time || null;
         this.end_time = data.end_time || null;
         this.category = data.category || '';
+        this.created_by = data.created_by || null;
         this.ticket_price = data.ticket_price || 0.00;
         this.status = data.status || 'active';
         this.created_at = data.created_at || null;
@@ -21,23 +22,24 @@ class Event {
         try {
             const {
                 title, description, longitude, latitude, address,
-                start_time, end_time, category, ticket_price, status = 'active'
+                start_time, end_time, category, ticket_price, status = 'active',
+                created_by
             } = eventData;
 
             const query = `
                 INSERT INTO events(
                     title, description, location, address, 
-                    start_time, end_time, category, 
+                    start_time, end_time, category, created_by, 
                     ticket_price, status, created_at, updated_at
                 ) VALUES(
                     $1, $2, ST_MakePoint($3, $4)::geography, $5, 
-                    $6, $7, $8, $9, $10, NOW(), NOW()
+                    $6, $7, $8, $9, $10, $11, NOW(), NOW()
                 ) RETURNING *;
             `;
 
             const values = [
                 title, description, longitude, latitude, address,
-                start_time, end_time, category, ticket_price, status
+                start_time, end_time, category, created_by, ticket_price, status
             ];
 
             const { rows } = await pool.query(query, values);
@@ -57,7 +59,7 @@ class Event {
                     ST_X(location::geometry) as longitude,
                     ST_Y(location::geometry) as latitude,
                     address, start_time, end_time, category, 
-                     ticket_price, status, created_at, updated_at
+                    created_by, ticket_price, status, created_at, updated_at
                 FROM events
                 WHERE id = $1 AND status != 'cancelled';
             `;
@@ -84,7 +86,7 @@ class Event {
                   ST_X(location::geometry) as longitude,
                   ST_Y(location::geometry) as latitude,
                   address, start_time, end_time, category, 
-                   ticket_price, status, created_at, updated_at
+                  created_by, ticket_price, status, created_at, updated_at
               FROM events
               WHERE status != 'cancelled'
           `;
@@ -92,7 +94,7 @@ class Event {
           const values = [];
           let paramPosition = 1;
   
-          // Filter by name (new)
+          // Filter by name
           if (filters.name) {
               query += ` AND LOWER(title) LIKE LOWER($${paramPosition})`;
               values.push(`%${filters.name}%`);
@@ -119,13 +121,19 @@ class Event {
               paramPosition++;
           }
   
-          // Filter by address (new)
+          // Filter by address
           if (filters.address) {
               query += ` AND LOWER(address) LIKE LOWER($${paramPosition})`;
               values.push(`%${filters.address}%`);
               paramPosition++;
           }
 
+          // Filter by creator (user ID)
+          if (filters.created_by) {
+              query += ` AND created_by = $${paramPosition}`;
+              values.push(filters.created_by);
+              paramPosition++;
+          }
   
           // Add order by clause
           query += ' ORDER BY start_time ASC';
@@ -160,7 +168,7 @@ class Event {
                 ST_X(location::geometry) as longitude,
                 ST_Y(location::geometry) as latitude,
                 address, start_time, end_time, category, 
-                ticket_price, status, created_at, updated_at,
+                created_by, ticket_price, status, created_at, updated_at,
                 ST_Distance(
                     location::geography, 
                     ST_MakePoint($1, $2)::geography
@@ -204,10 +212,16 @@ class Event {
               values.push(`%${filters.address}%`);
               paramPosition++;
           }
+          
+          // Filter by creator (user ID)
+          if (filters.created_by) {
+              query += ` AND created_by = $${paramPosition}`;
+              values.push(filters.created_by);
+              paramPosition++;
+          }
   
           // Add order by distance
           query += ' ORDER BY distance_km ASC';
-  
   
           const { rows } = await pool.query(query, values);
           return rows.map(row => ({
@@ -229,6 +243,7 @@ class Event {
             // Build update fields
             for (const [key, value] of Object.entries(eventData)) {
                 if (key === 'id') continue;
+                if (key === 'created_by') continue; // Prevent changing creator
                 if (key === 'longitude' || key === 'latitude') continue;
 
                 updateFields.push(`${key} = $${paramPosition}`);
@@ -345,6 +360,13 @@ class Event {
           if (filters.address) {
               query += ` AND LOWER(address) LIKE LOWER($${paramPosition})`;
               values.push(`%${filters.address}%`);
+              paramPosition++;
+          }
+          
+          // Filter by creator (user ID)
+          if (filters.created_by) {
+              query += ` AND created_by = $${paramPosition}`;
+              values.push(filters.created_by);
               paramPosition++;
           }
   

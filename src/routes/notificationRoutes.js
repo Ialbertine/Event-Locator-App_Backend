@@ -19,7 +19,4 @@ router.patch('/read-all', notificationController.markAllAsRead);
 // Delete a notification
 router.delete('/:notificationId', notificationController.deleteNotification);
 
-// Create a test notification admin only
-router.post('/test', notificationController.createTestNotification);
-
 module.exports = router;

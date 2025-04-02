@@ -2,14 +2,13 @@ const Event = require("../models/event");
 const { LanguageUtils } = require("../config/i18n");
 const { redisCacheInstance } = require("../config/redis");
 const { database } = require("../config/db");
-const { notificationService } = require('../services/notificationService');
+const { notificationService } = require("../services/notificationService");
 
-// Cache configuration
 const CACHE_EXPIRATION = 60 * 15;
 const CACHE_PREFIX = "event:";
 
 class EventController {
-  // Create a new event
+  // Create new event with validation and notifications
   async createEvent(req, res) {
     try {
       const validFields = [
@@ -26,13 +25,10 @@ class EventController {
       ];
 
       const eventData = {};
-      validFields.forEach(field => {
-        if (req.body[field] !== undefined) {
-          eventData[field] = req.body[field];
-        }
+      validFields.forEach((field) => {
+        if (req.body[field] !== undefined) eventData[field] = req.body[field];
       });
 
-      // Validate required fields
       const requiredFields = [
         "title",
         "address",
@@ -51,16 +47,12 @@ class EventController {
         });
       }
 
-      // Create the event
+      eventData.created_by = req.user.id;
       const newEvent = await Event.create(eventData);
 
-      // Schedule reminder notification for the new event
       await notificationService.scheduleEventReminder(newEvent);
-
-      // Invalidate relevant caches
       await redisCacheInstance.delete(`${CACHE_PREFIX}categories`);
 
-      // Response with success message in preferred language
       return res.status(201).json({
         success: true,
         message: LanguageUtils.translate("events.created"),
@@ -75,7 +67,7 @@ class EventController {
     }
   }
 
-  // Get all events with filtering
+  // Get events with filtering and pagination
   async getEvents(req, res) {
     try {
       let {
@@ -84,23 +76,19 @@ class EventController {
         endDate,
         limit = 20,
         offset = 0,
-        name, 
+        name,
         address,
+        created_by,
       } = req.query;
+      if (category) category = category.trim();
 
-      if (category) {
-        category = category.trim();
-      }
-
-      // Build cache key based on request parameters
       const cacheKey = `${CACHE_PREFIX}list:${name || ""}:${
         category || "all"
-      }:${startDate || ""}:${endDate || ""}:${
-        address || ""
+      }:${startDate || ""}:${endDate || ""}:${address || ""}:${
+        created_by || ""
       }:${limit}:${offset}`;
-
-      // Try to get from cache first
       const cachedEvents = await redisCacheInstance.get(cacheKey);
+
       if (cachedEvents) {
         return res.status(200).json({
           success: true,
@@ -109,26 +97,19 @@ class EventController {
         });
       }
 
-      // Build filters
       const filters = {
-        name, 
-        category: category,
-        startDate,
-        endDate,
-        address, 
-        limit: parseInt(limit),
-        offset: parseInt(offset),
-      };
-
-      // Get events with filters
-      const events = await Event.getAll(filters);
-      const total = await Event.count({
-        name, 
+        name,
         category,
         startDate,
         endDate,
         address,
-      });
+        created_by,
+        limit: parseInt(limit),
+        offset: parseInt(offset),
+      };
+
+      const events = await Event.getAll(filters);
+      const total = await Event.count(filters);
 
       const response = {
         success: true,
@@ -143,9 +124,7 @@ class EventController {
         },
       };
 
-      // Cache the response
       await redisCacheInstance.set(cacheKey, response.data, CACHE_EXPIRATION);
-
       return res.status(200).json(response);
     } catch (error) {
       console.error("Error fetching events:", error);
@@ -155,13 +134,25 @@ class EventController {
       });
     }
   }
-  
-  // Get a single event by ID
+
+  // Get events created by current user
+  async getMyEvents(req, res) {
+    try {
+      req.query.created_by = req.user.id;
+      return this.getEvents(req, res);
+    } catch (error) {
+      console.error("Error fetching user's events:", error);
+      return res.status(500).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  }
+
+  // Get single event by ID with caching
   async getEventById(req, res) {
     try {
       const { id } = req.params;
-
-      // Try to get from cache first
       const cacheKey = `${CACHE_PREFIX}${id}`;
       const cachedEvent = await redisCacheInstance.get(cacheKey);
 
@@ -173,9 +164,7 @@ class EventController {
         });
       }
 
-      // Get event from database
       const event = await Event.getById(id);
-
       if (!event) {
         return res.status(404).json({
           success: false,
@@ -183,9 +172,7 @@ class EventController {
         });
       }
 
-      // Cache the event
       await redisCacheInstance.set(cacheKey, event, CACHE_EXPIRATION);
-
       return res.status(200).json({
         success: true,
         data: event,
@@ -199,11 +186,10 @@ class EventController {
     }
   }
 
-  // Update an event
+  // Update event with change tracking and notifications
   async updateEvent(req, res) {
     try {
       const { id } = req.params;
-      // Define the valid columns for the Event table
       const validFields = [
         "title",
         "description",
@@ -217,17 +203,12 @@ class EventController {
         "status",
       ];
 
-      // Filter the request body to only include valid fields
       const eventData = {};
-      validFields.forEach(field => {
-        if (req.body[field] !== undefined) {
-          eventData[field] = req.body[field];
-        }
+      validFields.forEach((field) => {
+        if (req.body[field] !== undefined) eventData[field] = req.body[field];
       });
 
-      // Get the current event
       const existingEvent = await Event.getById(id);
-
       if (!existingEvent) {
         return res.status(404).json({
           success: false,
@@ -235,48 +216,72 @@ class EventController {
         });
       }
 
-      // Check if user is authorized to update the event
-      if (req.user.role !== "admin") {
+      if (
+        req.user.role !== "admin" &&
+        existingEvent.created_by !== req.user.id
+      ) {
         return res.status(403).json({
           success: false,
           message: LanguageUtils.translate("events.unauthorized"),
         });
       }
 
-      // Get what fields were changed
       const changedFields = [];
-      if (eventData.title && eventData.title !== existingEvent.title) changedFields.push('title');
-      if (eventData.description && eventData.description !== existingEvent.description) changedFields.push('description');
-      if (eventData.start_time && eventData.start_time !== existingEvent.start_time) changedFields.push('time');
-      if (eventData.address && eventData.address !== existingEvent.address) changedFields.push('location');
+      if (eventData.title && eventData.title !== existingEvent.title)
+        changedFields.push("title");
+      if (
+        eventData.description &&
+        eventData.description !== existingEvent.description
+      )
+        changedFields.push("description");
+      if (
+        eventData.start_time &&
+        eventData.start_time !== existingEvent.start_time
+      )
+        changedFields.push("time");
+      if (eventData.address && eventData.address !== existingEvent.address)
+        changedFields.push("location");
 
-      // Update the event
       const updatedEvent = await Event.update(id, eventData);
 
-      // Notify interested users about the update if there were changes
       if (changedFields.length > 0) {
         await notificationService.publishEventUpdate({
           id: updatedEvent.id,
           title: updatedEvent.title,
           category: updatedEvent.category,
-          changes: changedFields.join(', ')
+          changes: changedFields.join(", "),
         });
+
+        const creatorMessage = LanguageUtils.translate(
+          "events.creatorUpdate",
+          {
+            title: updatedEvent.title,
+            changes: changedFields.join(", "),
+          },
+          { lng: req.language }
+        );
+
+        await notificationService.sendDirectNotification(
+          req.user.id,
+          "EVENT_UPDATE",
+          creatorMessage,
+          updatedEvent.id
+        );
       }
 
-      // If start time changed, reschedule the reminder
-      if (eventData.start_time && eventData.start_time !== existingEvent.start_time) {
+      if (
+        eventData.start_time &&
+        eventData.start_time !== existingEvent.start_time
+      ) {
         await notificationService.scheduleEventReminder(updatedEvent);
       }
 
-      // Invalidate cache
       await redisCacheInstance.delete(`${CACHE_PREFIX}${id}`);
-
-      // Invalidate list caches - we'll use a pattern delete if Redis supports it
-      // or manually delete common cache combinations
       await redisCacheInstance.delete(`${CACHE_PREFIX}list:all:`);
       await redisCacheInstance.delete(
         `${CACHE_PREFIX}list:${existingEvent.category}:`
       );
+
       if (eventData.category && eventData.category !== existingEvent.category) {
         await redisCacheInstance.delete(
           `${CACHE_PREFIX}list:${eventData.category}:`
@@ -297,12 +302,10 @@ class EventController {
     }
   }
 
-  // Delete an event
+  // Delete event with notifications and cache invalidation
   async deleteEvent(req, res) {
     try {
       const { id } = req.params;
-
-      // Get the current event
       const existingEvent = await Event.getById(id);
 
       if (!existingEvent) {
@@ -312,29 +315,41 @@ class EventController {
         });
       }
 
-      // Check if user is authorized to delete the event
-      if (req.user.role !== "admin") {
+      if (
+        req.user.role !== "admin" &&
+        existingEvent.created_by !== req.user.id
+      ) {
         return res.status(403).json({
           success: false,
           message: LanguageUtils.translate("events.unauthorized"),
         });
       }
 
-      // Delete (soft delete) the event
-      const result = await Event.delete(id);
+      await Event.delete(id);
 
-      // Notify registered users about cancellation
       await notificationService.publishEventUpdate({
         id: existingEvent.id,
         title: existingEvent.title,
         category: existingEvent.category,
-        changes: 'cancelled'
+        changes: "cancelled",
       });
 
-      // Invalidate cache
-      await redisCacheInstance.delete(`${CACHE_PREFIX}${id}`);
+      const creatorMessage = LanguageUtils.translate(
+        "events.creatorDelete",
+        {
+          title: existingEvent.title,
+        },
+        { lng: req.language }
+      );
 
-      // Invalidate list caches
+      await notificationService.sendDirectNotification(
+        req.user.id,
+        "EVENT_DELETE",
+        creatorMessage,
+        existingEvent.id
+      );
+
+      await redisCacheInstance.delete(`${CACHE_PREFIX}${id}`);
       await redisCacheInstance.delete(`${CACHE_PREFIX}list:all:`);
       await redisCacheInstance.delete(
         `${CACHE_PREFIX}list:${existingEvent.category}:`
@@ -353,7 +368,7 @@ class EventController {
     }
   }
 
-  // Find events nearby a location
+  // Find nearby events with geospatial filtering
   async findEventsNearby(req, res) {
     try {
       let {
@@ -366,14 +381,11 @@ class EventController {
         limit = 20,
         offset = 0,
         name,
-        address, 
+        address,
+        created_by,
       } = req.query;
+      if (category) category = category.trim();
 
-      if (category) {
-        category = category.trim();
-      }
-
-      // Validate location parameters
       if (!latitude || !longitude) {
         return res.status(400).json({
           success: false,
@@ -381,15 +393,13 @@ class EventController {
         });
       }
 
-      // Build cache key
       const cacheKey = `${CACHE_PREFIX}nearby:${latitude}:${longitude}:${radius}:${
         name || ""
       }:${category || "all"}:${startDate || ""}:${endDate || ""}:${
         address || ""
-      }:${limit}:${offset}`;
-
-      // Try to get from cache
+      }:${created_by || ""}:${limit}:${offset}`;
       const cachedEvents = await redisCacheInstance.get(cacheKey);
+
       if (cachedEvents) {
         return res.status(200).json({
           success: true,
@@ -398,13 +408,13 @@ class EventController {
         });
       }
 
-      // Use our geospatial helper to find nearby events
       const filters = {
         name,
         category,
         startDate,
         endDate,
-        address, 
+        address,
+        created_by,
         limit: parseInt(limit),
         offset: parseInt(offset),
       };
@@ -429,9 +439,7 @@ class EventController {
         },
       };
 
-      // Cache the results
       await redisCacheInstance.set(cacheKey, response.data, CACHE_EXPIRATION);
-
       return res.status(200).json(response);
     } catch (error) {
       console.error("Error finding nearby events:", error);
@@ -442,7 +450,7 @@ class EventController {
     }
   }
 
-  // Get all event categories
+  // Get all event categories with caching
   async getCategories(req, res) {
     try {
       const cacheKey = `${CACHE_PREFIX}categories`;
@@ -456,11 +464,8 @@ class EventController {
         });
       }
 
-      // Get categories from database
       const categories = await Event.getCategories();
-
-      // Cache the results
-      await redisCacheInstance.set(cacheKey, categories, CACHE_EXPIRATION * 2); // Longer expiration for categories
+      await redisCacheInstance.set(cacheKey, categories, CACHE_EXPIRATION * 2);
 
       return res.status(200).json({
         success: true,
@@ -475,7 +480,7 @@ class EventController {
     }
   }
 
-  // Calculate distance between two points
+  // Calculate distance between two geographic points
   async calculateDistance(req, res) {
     try {
       const { lat1, lon1, lat2, lon2 } = req.query;
@@ -487,7 +492,6 @@ class EventController {
         });
       }
 
-      // Use pg-promise for calculation
       const distance = await database.geo.calculateDistance(
         parseFloat(lat1),
         parseFloat(lon1),
