@@ -1,0 +1,34 @@
+{
+  "user": {
+    "register": {
+      "success": "User registered successfully",
+      "error": {
+        "exists": "Username or email already exists",
+        "validation": "Validation error"
+      }
+    },
+    "login": {
+      "success": "Login successful",
+      "error": {
+        "invalid": "Invalid credentials",
+        "suspended": "Account suspended"
+      }
+    },
+    "profile": {
+      "not_found": "User not found",
+      "update_success": "Profile updated successfully",
+      "delete_success": "Profile deleted successfully"
+    }
+  },
+  "errors": {
+    "server": "Server error",
+    "validation": "Validation error",
+    "auth": {
+      "no_header": "No authorization header provided",
+      "invalid_format": "Invalid authorization format",
+      "token_revoked": "Token revoked",
+      "failed": "Authentication failed",
+      "insufficient_permissions": "Insufficient permissions"
+    }
+  }
+}

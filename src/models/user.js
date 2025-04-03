@@ -1,7 +1,6 @@
 const { pool, database } = require('../config/db');
 const argon2 = require('argon2');
 
-
 class User {
     static async create({
         username,
@@ -10,7 +9,6 @@ class User {
         firstName,
         lastName,
         phoneNumber,
-        language = 'en',
         location, 
         preferredCategories = []
     }) {
@@ -18,12 +16,12 @@ class User {
         const query = `
             INSERT INTO users (
                 username, email, password_hash, first_name, last_name,
-                phone_number, language, location, preferred_categories
+                phone_number, location, preferred_categories
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, ST_SetSRID(ST_MakePoint($8, $9), 4326), $10)
+            VALUES ($1, $2, $3, $4, $5, $6, ST_SetSRID(ST_MakePoint($7, $8), 4326), $9)
             RETURNING 
                 id, username, email, first_name, last_name, phone_number,
-                language, preferred_categories, status,
+                preferred_categories, status,
                 ST_AsGeoJSON(location) as location,
                 created_at
         `;
@@ -31,7 +29,7 @@ class User {
         try {
             const result = await pool.query(query, [
                 username, email, passwordHash, firstName, lastName,
-                phoneNumber, language, 
+                phoneNumber,
                 location.coordinates[0], // longitude
                 location.coordinates[1], // latitude
                 preferredCategories
@@ -55,7 +53,7 @@ class User {
         const query = `
             SELECT 
                 id, username, email, password_hash, first_name, last_name,
-                phone_number, language, status, preferred_categories,
+                phone_number, status, preferred_categories,
                 ST_AsGeoJSON(location) as location
             FROM users
             WHERE email = $1 AND status != 'deleted'
@@ -71,7 +69,7 @@ class User {
         const query = `
             SELECT 
                 id, username, email, first_name, last_name, phone_number,
-                language, status, preferred_categories,
+                status, preferred_categories,
                 ST_AsGeoJSON(location) as location,
                 created_at, updated_at
             FROM users
@@ -89,7 +87,6 @@ class User {
             firstName,
             lastName,
             phoneNumber,
-            language,
             location
         } = updates;
 
@@ -115,12 +112,6 @@ class User {
             paramIndex++;
         }
 
-        if (language !== undefined) {
-            setClauses.push(`language = $${paramIndex}`);
-            values.push(language);
-            paramIndex++;
-        }
-
         if (location !== undefined) {
             setClauses.push(`location = ST_SetSRID(ST_MakePoint($${paramIndex}, $${paramIndex + 1}), 4326)`);
             values.push(location.coordinates[0], location.coordinates[1]);
@@ -139,7 +130,7 @@ class User {
             WHERE id = $1
             RETURNING 
                 id, username, email, first_name, last_name, phone_number,
-                language, status, preferred_categories,
+                status, preferred_categories,
                 ST_AsGeoJSON(location) as location,
                 updated_at
         `;
@@ -163,7 +154,6 @@ class User {
         return result.rowCount > 0;
     }
 
-    // Additional methods using pg-promise for more complex queries
     static async findNearbyUsers(latitude, longitude, radiusKm) {
         return database.geo.findEventsNearby(latitude, longitude, radiusKm)
             .then(events => events)

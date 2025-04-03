@@ -99,7 +99,6 @@ async function initializeDatabase() {
               first_name VARCHAR(50) NOT NULL,
               last_name VARCHAR(50) NOT NULL,
               phone_number VARCHAR(20),
-              language VARCHAR(10) DEFAULT 'en',
               status VARCHAR(20) DEFAULT 'active',
               role VARCHAR(20) NOT NULL DEFAULT 'user',
               location GEOGRAPHY(Point, 4326),

@@ -12,36 +12,34 @@ class Auth {
       if (!authHeader) {
         return res.status(401).json({
           success: false,
-          message: 'No authorization header provided'
+          message: req.t('errors.auth.no_header')
         });
       }
-
+  
       const [scheme, token] = authHeader.split(' ');
       if (!scheme || !token || !/^Bearer$/i.test(scheme)) {
         return res.status(401).json({
           success: false,
-          message: 'Invalid authorization format'
+          message: req.t('errors.auth.invalid_format')
         });
       }
-
+  
       if (!process.env.JWT_SECRET) {
         console.error('JWT_SECRET missing');
         return res.status(500).json({
           success: false,
-          message: 'Server configuration error'
+          message: req.t('errors.server')
         });
       }
-
-      // Check token blacklist
+  
       const isBlacklisted = await this.cache.get(`blacklist:${token}`);
       if (isBlacklisted) {
         return res.status(401).json({
           success: false,
-          message: 'Token revoked'
+          message: req.t('errors.auth.token_revoked')
         });
       }
-
-      // Verify token
+  
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       req.user = decoded;
       next();
@@ -49,7 +47,7 @@ class Auth {
       console.error('Authentication error:', error);
       res.status(401).json({
         success: false,
-        message: 'Authentication failed',
+        message: req.t('errors.auth.failed'),
         error: error.message
       });
     }
@@ -62,7 +60,7 @@ class Auth {
       if (roles.length && !roles.includes(req.user.role)) {
         return res.status(403).json({
           success: false,
-          message: 'Insufficient permissions'
+          message: req.t('errors.auth.insufficient_permissions')
         });
       }
       next();

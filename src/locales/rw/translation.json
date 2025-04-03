@@ -1,0 +1,34 @@
+{
+  "user": {
+    "register": {
+      "success": "Umukoresha yanditswe neza",
+      "error": {
+        "exists": "Izina ry'umukoresha cyangwa imeri yaramushyizweho mbere",
+        "validation": "Ikosa yo kugenzura"
+      }
+    },
+    "login": {
+      "success": "Winjire neza",
+      "error": {
+        "invalid": "Ibyangombwa ntabwo ari byo",
+        "suspended": "Konti yahagaritswe"
+      }
+    },
+    "profile": {
+      "not_found": "Umukoresha ntabwo yabonetse",
+      "update_success": "Profaili yavugururwa neza",
+      "delete_success": "Profaili yasibwe neza"
+    }
+  },
+  "errors": {
+    "server": "Ikosa ya seriveri",
+    "validation": "Ikosa yo kugenzura",
+    "auth": {
+      "no_header": "Nta mutwe w'uburenganzira watanzwe",
+      "invalid_format": "Ifishi y'uburenganzira ntabwo ari yo",
+      "token_revoked": "Token yahagaritswe",
+      "failed": "Kwinjira ntabwo byakunze",
+      "insufficient_permissions": "Ubusabwe ntibuhagije"
+    }
+  }
+}

@@ -3,11 +3,15 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const { initializeDatabase } = require('./config/db');
-const { initializeI18n, i18nMiddleware } = require('./config/i18n');
 const { connectRedis, redisCacheInstance } = require('./config/redis');
+const { i18next, middleware: i18nMiddleware } = require('./config/i18n');
+
+// Routes
 const userRoutes = require('./routes/userRoutes');
 const eventRoutes = require('./routes/eventRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
+
+// Migrations and services
 const createNotificationsTable = require('./migrations/notificationTable'); 
 
 const app = express();
@@ -19,7 +23,6 @@ async function initializeApp() {
     await initializeDatabase();
     console.log('[Init] Database OK');
     
-    // Create notifications table
     console.log('[Init] Creating notifications table...');
     await createNotificationsTable();
     console.log('[Init] Notifications table OK');
@@ -27,16 +30,10 @@ async function initializeApp() {
     console.log('[Init] Connecting to Redis...');
     await connectRedis();
     
-    // Verify Redis connection
     const redisReady = await redisCacheInstance.ensureConnected();
     if (!redisReady) throw new Error('Redis connection verification failed');
     console.log('[Init] Redis OK');
-
-    console.log('[Init] Initializing i18n...');
-    await initializeI18n();
-    console.log('[Init] i18n OK');
     
-    // Load notification service
     console.log('[Init] Setting up notification service...');
     require('./services/notificationService');
     console.log('[Init] Notification service OK');
@@ -49,31 +46,32 @@ async function initializeApp() {
   }
 }
 
-// Middleware
-app.use(express.json());
+// Middleware - ORDER MATTERS!
+app.use(helmet()); // Security first
 app.use(cors());
-app.use(helmet());
 app.use(morgan('dev'));
-app.use(i18nMiddleware());
+app.use(express.json());
+app.use(i18nMiddleware.handle(i18next)); // i18n before routes
 
-// Health Check
+// Health Check (should be before other routes)
 app.get('/health', async (req, res) => {
   const health = {
     status: 'OK',
     timestamp: Date.now(),
     redis: await redisCacheInstance.ensureConnected(),
-    uptime: process.uptime()
+    uptime: process.uptime(),
+    language: req.language // Add language detection verification
   };
   res.status(health.redis ? 200 : 503).json(health);
 });
 
 // Routes
-app.get('/', (req, res) => res.send('Server is running'));
+app.get('/', (req, res) => res.send(req.t('server.welcome_message')));
 app.use('/api/users', userRoutes);
 app.use('/api/events', eventRoutes);
-app.use('/api/notifications', notificationRoutes); 
+app.use('/api/notifications', notificationRoutes);
 
-// Error Handling
+// Error Handling - MUST be last middleware
 app.use(require('./middlewares/errorHandler'));
 
 // Start Server
@@ -83,7 +81,6 @@ initializeApp().then(() => {
     console.log(`Server running on port ${PORT}`);
   });
 
-  // Graceful shutdown
   process.on('SIGTERM', () => {
     console.log('SIGTERM received. Shutting down gracefully...');
     server.close(() => {

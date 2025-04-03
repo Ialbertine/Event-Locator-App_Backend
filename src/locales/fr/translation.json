@@ -1,0 +1,34 @@
+{
+  "user": {
+    "register": {
+      "success": "Utilisateur enregistré avec succès",
+      "error": {
+        "exists": "Le nom d'utilisateur ou l'e-mail existe déjà",
+        "validation": "Erreur de validation"
+      }
+    },
+    "login": {
+      "success": "Connexion réussie",
+      "error": {
+        "invalid": "Identifiants invalides",
+        "suspended": "Compte suspendu"
+      }
+    },
+    "profile": {
+      "not_found": "Utilisateur non trouvé",
+      "update_success": "Profil mis à jour avec succès",
+      "delete_success": "Profil supprimé avec succès"
+    }
+  },
+  "errors": {
+    "server": "Erreur du serveur",
+    "validation": "Erreur de validation",
+    "auth": {
+      "no_header": "Aucun en-tête d'autorisation fourni",
+      "invalid_format": "Format d'autorisation invalide",
+      "token_revoked": "Jeton révoqué",
+      "failed": "Échec de l'authentification",
+      "insufficient_permissions": "Permissions insuffisantes"
+    }
+  }
+}
