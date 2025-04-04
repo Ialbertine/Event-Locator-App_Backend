@@ -30,5 +30,56 @@
       "failed": "Échec de l'authentification",
       "insufficient_permissions": "Permissions insuffisantes"
     }
+  },
+
+  "event": {
+    "create": {
+      "success": "Événement créé avec succès",
+      "error": {
+        "missing_fields": "Champs obligatoires manquants",
+        "server": "Erreur lors de la création de l'événement"
+      }
+    },
+    "get": {
+      "success": "Événements récupérés avec succès",
+      "error": {
+        "not_found": "Événement non trouvé",
+        "server": "Erreur lors de la récupération des événements"
+      }
+    },
+    "update": {
+      "success": "Événement mis à jour avec succès",
+      "error": {
+        "unauthorized": "Non autorisé à mettre à jour cet événement",
+        "server": "Erreur lors de la mise à jour de l'événement"
+      }
+    },
+    "delete": {
+      "success": "Événement supprimé avec succès",
+      "error": {
+        "unauthorized": "Non autorisé à supprimer cet événement",
+        "server": "Erreur lors de la suppression de l'événement"
+      }
+    },
+    "nearby": {
+      "success": "Événements à proximité récupérés avec succès",
+      "error": {
+        "missing_coords": "La latitude et la longitude sont requises",
+        "server": "Erreur lors de la recherche d'événements à proximité"
+      }
+    },
+    "categories": {
+      "success": "Catégories d'événements récupérées avec succès",
+      "error": {
+        "server": "Erreur lors de la récupération des catégories d'événements"
+      }
+    },
+    "distance": {
+      "success": "Distance calculée avec succès",
+      "error": {
+        "missing_coords": "Toutes les coordonnées sont requises",
+        "server": "Erreur lors du calcul de la distance"
+      }
+    }
   }
 }

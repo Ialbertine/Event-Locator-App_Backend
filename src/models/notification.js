@@ -1,4 +1,3 @@
-// models/notificationModel.js
 const { pool } = require('../config/db');
 
 class Notification {

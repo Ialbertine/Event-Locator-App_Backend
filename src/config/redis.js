@@ -62,7 +62,12 @@ class RedisCache {
     if (!isRedisConnected) return null;
     try {
       const reply = await this.client.get(key);
-      return reply ? JSON.parse(reply) : null;
+      if (reply) {
+        await this.client.incr('cache:hits');
+        return JSON.parse(reply);
+      }
+      await this.client.incr('cache:misses');
+      return null;
     } catch (err) {
       console.error('Redis GET error:', err);
       return null;
@@ -87,6 +92,46 @@ class RedisCache {
       return true;
     } catch (err) {
       console.error('Redis DEL error:', err);
+      return false;
+    }
+  }
+
+  async deleteByPattern(pattern) {
+    if (!isRedisConnected) return false;
+    try {
+      const keys = await this.client.keys(pattern);
+      if (keys.length > 0) {
+        await this.client.del(keys);
+      }
+      return true;
+    } catch (err) {
+      console.error('Redis DEL pattern error:', err);
+      return false;
+    }
+  }
+
+  async getStats() {
+    if (!isRedisConnected) return null;
+    try {
+      return {
+        hits: await this.client.get('cache:hits') || 0,
+        misses: await this.client.get('cache:misses') || 0,
+        size: await this.client.dbsize(),
+        connected: isRedisConnected
+      };
+    } catch (err) {
+      console.error('Redis stats error:', err);
+      return null;
+    }
+  }
+
+  async flushAll() {
+    if (!isRedisConnected) return false;
+    try {
+      await this.client.flushAll();
+      return true;
+    } catch (err) {
+      console.error('Redis FLUSHALL error:', err);
       return false;
     }
   }

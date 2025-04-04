@@ -30,5 +30,56 @@
       "failed": "Authentication failed",
       "insufficient_permissions": "Insufficient permissions"
     }
+  },
+
+  "event": {
+    "create": {
+      "success": "Event created successfully",
+      "error": {
+        "missing_fields": "Missing required fields",
+        "server": "Error creating event"
+      }
+    },
+    "get": {
+      "success": "Events retrieved successfully",
+      "error": {
+        "not_found": "Event not found",
+        "server": "Error fetching events"
+      }
+    },
+    "update": {
+      "success": "Event updated successfully",
+      "error": {
+        "unauthorized": "Unauthorized to update this event",
+        "server": "Error updating event"
+      }
+    },
+    "delete": {
+      "success": "Event deleted successfully",
+      "error": {
+        "unauthorized": "Unauthorized to delete this event",
+        "server": "Error deleting event"
+      }
+    },
+    "nearby": {
+      "success": "Nearby events retrieved successfully",
+      "error": {
+        "missing_coords": "Latitude and longitude are required",
+        "server": "Error finding nearby events"
+      }
+    },
+    "categories": {
+      "success": "Event categories retrieved successfully",
+      "error": {
+        "server": "Error fetching event categories"
+      }
+    },
+    "distance": {
+      "success": "Distance calculated successfully",
+      "error": {
+        "missing_coords": "All coordinates are required",
+        "server": "Error calculating distance"
+      }
+    }
   }
 }

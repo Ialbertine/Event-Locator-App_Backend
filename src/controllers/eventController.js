@@ -1,5 +1,4 @@
 const Event = require("../models/event");
-const { LanguageUtils } = require("../config/i18n");
 const { redisCacheInstance } = require("../config/redis");
 const { database } = require("../config/db");
 const { notificationService } = require("../services/notificationService");
@@ -43,7 +42,9 @@ class EventController {
       if (missingFields.length > 0) {
         return res.status(400).json({
           success: false,
-          message: `Missing required fields: ${missingFields.join(", ")}`,
+          message: req.t("event.create.error.missing_fields", {
+            fields: missingFields.join(", "),
+          }),
         });
       }
 
@@ -55,14 +56,14 @@ class EventController {
 
       return res.status(201).json({
         success: true,
-        message: LanguageUtils.translate("events.created"),
+        message: req.t("event.create.success"),
         data: newEvent,
       });
     } catch (error) {
       console.error("Error creating event:", error);
       return res.status(500).json({
         success: false,
-        message: error.message,
+        message: req.t("event.create.error.server"),
       });
     }
   }
@@ -80,7 +81,13 @@ class EventController {
         address,
         created_by,
       } = req.query;
-      if (category) category = category.trim();
+
+      if (category !== undefined) {
+        category = category.trim();
+        if (category === "") {
+          category = undefined;
+        }
+      }
 
       const cacheKey = `${CACHE_PREFIX}list:${name || ""}:${
         category || "all"
@@ -113,6 +120,7 @@ class EventController {
 
       const response = {
         success: true,
+        message: req.t("event.get.success"),
         data: {
           events,
           pagination: {
@@ -130,7 +138,7 @@ class EventController {
       console.error("Error fetching events:", error);
       return res.status(500).json({
         success: false,
-        message: error.message,
+        message: req.t("event.get.error.server"),
       });
     }
   }
@@ -144,7 +152,7 @@ class EventController {
       console.error("Error fetching user's events:", error);
       return res.status(500).json({
         success: false,
-        message: error.message,
+        message: req.t("event.get.error.server"),
       });
     }
   }
@@ -168,20 +176,21 @@ class EventController {
       if (!event) {
         return res.status(404).json({
           success: false,
-          message: LanguageUtils.translate("events.notFound"),
+          message: req.t("event.get.error.not_found"),
         });
       }
 
       await redisCacheInstance.set(cacheKey, event, CACHE_EXPIRATION);
       return res.status(200).json({
         success: true,
+        message: req.t("event.get.success"),
         data: event,
       });
     } catch (error) {
       console.error("Error fetching event by ID:", error);
       return res.status(500).json({
         success: false,
-        message: error.message,
+        message: req.t("event.get.error.server"),
       });
     }
   }
@@ -212,7 +221,7 @@ class EventController {
       if (!existingEvent) {
         return res.status(404).json({
           success: false,
-          message: LanguageUtils.translate("events.notFound"),
+          message: req.t("event.get.error.not_found"),
         });
       }
 
@@ -222,7 +231,7 @@ class EventController {
       ) {
         return res.status(403).json({
           success: false,
-          message: LanguageUtils.translate("events.unauthorized"),
+          message: req.t("event.update.error.unauthorized"),
         });
       }
 
@@ -252,14 +261,10 @@ class EventController {
           changes: changedFields.join(", "),
         });
 
-        const creatorMessage = LanguageUtils.translate(
-          "events.creatorUpdate",
-          {
-            title: updatedEvent.title,
-            changes: changedFields.join(", "),
-          },
-          { lng: req.language }
-        );
+        const creatorMessage = req.t("notification.event_update", {
+          title: updatedEvent.title,
+          changes: changedFields.join(", "),
+        });
 
         await notificationService.sendDirectNotification(
           req.user.id,
@@ -290,14 +295,14 @@ class EventController {
 
       return res.status(200).json({
         success: true,
-        message: LanguageUtils.translate("events.updated"),
+        message: req.t("event.update.success"),
         data: updatedEvent,
       });
     } catch (error) {
       console.error("Error updating event:", error);
       return res.status(500).json({
         success: false,
-        message: error.message,
+        message: req.t("event.update.error.server"),
       });
     }
   }
@@ -311,7 +316,7 @@ class EventController {
       if (!existingEvent) {
         return res.status(404).json({
           success: false,
-          message: LanguageUtils.translate("events.notFound"),
+          message: req.t("event.get.error.not_found"),
         });
       }
 
@@ -321,7 +326,7 @@ class EventController {
       ) {
         return res.status(403).json({
           success: false,
-          message: LanguageUtils.translate("events.unauthorized"),
+          message: req.t("event.delete.error.unauthorized"),
         });
       }
 
@@ -334,13 +339,9 @@ class EventController {
         changes: "cancelled",
       });
 
-      const creatorMessage = LanguageUtils.translate(
-        "events.creatorDelete",
-        {
-          title: existingEvent.title,
-        },
-        { lng: req.language }
-      );
+      const creatorMessage = req.t("notification.event_delete", {
+        title: existingEvent.title,
+      });
 
       await notificationService.sendDirectNotification(
         req.user.id,
@@ -357,13 +358,13 @@ class EventController {
 
       return res.status(200).json({
         success: true,
-        message: LanguageUtils.translate("events.deleted"),
+        message: req.t("event.delete.success"),
       });
     } catch (error) {
       console.error("Error deleting event:", error);
       return res.status(500).json({
         success: false,
-        message: error.message,
+        message: req.t("event.delete.error.server"),
       });
     }
   }
@@ -384,12 +385,17 @@ class EventController {
         address,
         created_by,
       } = req.query;
-      if (category) category = category.trim();
+     
+      if (filters.category && filters.category.trim() !== '') {
+        query += ` AND category = $${paramPosition}`;
+        values.push(filters.category.trim());
+        paramPosition++;
+      }
 
       if (!latitude || !longitude) {
         return res.status(400).json({
           success: false,
-          message: "Latitude and longitude are required",
+          message: req.t("event.nearby.error.missing_coords"),
         });
       }
 
@@ -428,6 +434,7 @@ class EventController {
 
       const response = {
         success: true,
+        message: req.t("event.nearby.success"),
         data: {
           events,
           center: {
@@ -445,7 +452,7 @@ class EventController {
       console.error("Error finding nearby events:", error);
       return res.status(500).json({
         success: false,
-        message: error.message,
+        message: req.t("event.nearby.error.server"),
       });
     }
   }
@@ -469,13 +476,14 @@ class EventController {
 
       return res.status(200).json({
         success: true,
+        message: req.t("event.categories.success"),
         data: categories,
       });
     } catch (error) {
       console.error("Error fetching event categories:", error);
       return res.status(500).json({
         success: false,
-        message: error.message,
+        message: req.t("event.categories.error.server"),
       });
     }
   }
@@ -488,7 +496,7 @@ class EventController {
       if (!lat1 || !lon1 || !lat2 || !lon2) {
         return res.status(400).json({
           success: false,
-          message: "All coordinates (lat1, lon1, lat2, lon2) are required",
+          message: req.t("event.distance.error.missing_coords"),
         });
       }
 
@@ -501,6 +509,7 @@ class EventController {
 
       return res.status(200).json({
         success: true,
+        message: req.t("event.distance.success"),
         data: {
           distance_km: distance,
           distance_miles: distance * 0.621371,
@@ -510,8 +519,18 @@ class EventController {
       console.error("Error calculating distance:", error);
       return res.status(500).json({
         success: false,
-        message: error.message,
+        message: req.t("event.distance.error.server"),
       });
+    }
+  }
+
+  // clear all events from redis cache
+  async clearAllEventCaches() {
+    try {
+      return await redisCacheInstance.deleteByPattern(`${CACHE_PREFIX}*`);
+    } catch (error) {
+      console.error("Error clearing all event caches:", error);
+      return false;
     }
   }
 }

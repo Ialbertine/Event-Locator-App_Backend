@@ -30,5 +30,56 @@
       "failed": "Kwinjira ntabwo byakunze",
       "insufficient_permissions": "Ubusabwe ntibuhagije"
     }
+  },
+
+  "event": {
+    "create": {
+      "success": "Icyegeranyo cyaremwe neza",
+      "error": {
+        "missing_fields": "Ibisabwa ntabwo byuzuye",
+        "server": "Ikosa mu kurema icyegeranyo"
+      }
+    },
+    "get": {
+      "success": "Ibyegeranyo byakiriwe neza",
+      "error": {
+        "not_found": "Icyegeranyo ntabwo cyabonetse",
+        "server": "Ikosa mu kubona ibyegeranyo"
+      }
+    },
+    "update": {
+      "success": "Icyegeranyo cyavugururwa neza",
+      "error": {
+        "unauthorized": "Ntabwo ufite uburenganzira bwo kuvugurura icyegeranyo",
+        "server": "Ikosa mu kuvugurura icyegeranyo"
+      }
+    },
+    "delete": {
+      "success": "Icyegeranyo cyasibwe neza",
+      "error": {
+        "unauthorized": "Ntabwo ufite uburenganzira bwo gusiba icyegeranyo",
+        "server": "Ikosa mu gusiba icyegeranyo"
+      }
+    },
+    "nearby": {
+      "success": "Ibyegeranyo byo hafi byakiriwe neza",
+      "error": {
+        "missing_coords": "Latitude na longitude biri ngombwa",
+        "server": "Ikosa mu kubona ibyegeranyo byo hafi"
+      }
+    },
+    "categories": {
+      "success": "Ibyiciro by'ibyegeranyo byakiriwe neza",
+      "error": {
+        "server": "Ikosa mu kubona ibyiciro by'ibyegeranyo"
+      }
+    },
+    "distance": {
+      "success": "Intera yabarebwe neza",
+      "error": {
+        "missing_coords": "Ibyerekanwe byose biri ngombwa",
+        "server": "Ikosa mu kubara intera"
+      }
+    }
   }
 }
