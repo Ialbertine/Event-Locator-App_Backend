@@ -11,12 +11,12 @@ const userRoutes = require('./routes/userRoutes');
 const eventRoutes = require('./routes/eventRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 
-// Migrations and services
+// notification services
 const createNotificationsTable = require('./migrations/notificationTable'); 
 
 const app = express();
 
-// Enhanced Initialization
+//nitialization
 async function initializeApp() {
   try {
     console.log('[Init] Starting database...');
@@ -46,21 +46,21 @@ async function initializeApp() {
   }
 }
 
-// Middleware - ORDER MATTERS!
-app.use(helmet()); // Security first
+// Middleware 
+app.use(helmet()); 
 app.use(cors());
 app.use(morgan('dev'));
 app.use(express.json());
 app.use(i18nMiddleware.handle(i18next)); // i18n before routes
 
-// Health Check (should be before other routes)
+// Health Check Endpoint
 app.get('/health', async (req, res) => {
   const health = {
     status: 'OK',
     timestamp: Date.now(),
     redis: await redisCacheInstance.ensureConnected(),
     uptime: process.uptime(),
-    language: req.language // Add language detection verification
+    language: req.language 
   };
   res.status(health.redis ? 200 : 503).json(health);
 });
@@ -71,7 +71,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/events', eventRoutes);
 app.use('/api/notifications', notificationRoutes);
 
-// Error Handling - MUST be last middleware
+// Error Handling
 app.use(require('./middlewares/errorHandler'));
 
 // Start Server

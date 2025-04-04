@@ -61,24 +61,25 @@ The Event Locator App is a multi-user backend system built with Node.js and Expr
 
 ### Authentication (`/auth`)
 
-- `POST /register` - Register a new user.
-- `POST /login` - Authenticate user and return JWT.
-- `GET /get-user-profile` - Retrieve user profile.
-- `PUT /update-user-profile` - Update user profile.
-- `DELETE /delete-user-account` - Remove user account.
+- `POST api/register` - Register a new user.
+- `POST api/login` - Authenticate user and return JWT.
+- `GET api/profile` - Retrieve user profile.
+- `PUT api/update-profile` - Update user profile.
+- `DELETE api/delete-profile` - Remove user account.
 
 ### Event Management (`/event`)
 
-- `POST /create-event` - Create a new event.
-- `GET /fetch-all-events` - Retrieve all events.
-- `GET /get-event-by-id` - Fetch details of a specific event.
-- `GET /search-by-category` - Search events by category.
-- `GET /search-by-names` - Search events by name.
-- `GET /search-by-address` - Find events by address.
-- `GET /get-nearby-events` - Fetch nearby events.
-- `GET /display-distance` - Calculate the distance to events.
-- `PUT /update-event` - Update event details.
-- `DELETE /delete-event` - Remove an event (only by the owner).
+- `POST api/events` - Create a new event.
+- `GET api/events` - Retrieve all events.
+- `GET api/events/:id` - Fetch details of a specific event.
+- `GET api/api/events/categories` - Fetch events categories
+- `GET /api/events?category=name_category` - Search events by category.
+- `GET /api/events?name=your_name` - Search events by name.
+- `GET /api/events?address=your_address` - Find events by address.
+- `GET /api/events/nearby` - Fetch nearby events.
+- `GET /api/events/distance` - Calculate the distance to events.
+- `PUT /api/events/:id` - Update event details.
+- `DELETE /api/events/:id` - Remove an event (owner of the events).
 
 ### Notifications (`/notification`)
 
@@ -135,7 +136,7 @@ The Event Locator App is a multi-user backend system built with Node.js and Expr
    npm test # for testing
    ```
 
-**Author:** [Albertine INGABIRE] 
+**Author:** Albertine INGABIRE
 
 ## Here is LINK to the DEMO video:
 
