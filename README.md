@@ -89,8 +89,8 @@ The Event Locator App is a multi-user backend system built with Node.js and Expr
 1. **Clone the repository:**
 
    ```bash
-   git clone https://github.com/your-repo/event-locator-backend.git
-   cd event-locator-backend
+   git clone https://github.com/Ialbertine/Event-Locator-App_Backend.git
+   cd Event-Locator-App_Backend
    ```
 
 2. **Install dependencies:**
