@@ -15,8 +15,8 @@ i18next
     },
     detection: {
       order: ['header', 'cookie', 'query'],
-      caches: ['cookie'],
-      lookupHeader: 'Accept-Language',
+      caches: false,
+      lookupHeader: 'lang',
       lookupCookie: 'i18next',
       lookupQuery: 'lang',
     },

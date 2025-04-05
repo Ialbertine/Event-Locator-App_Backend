@@ -8,7 +8,7 @@
       }
     },
     "login": {
-      "success": "Winjire neza",
+      "success": "Winjiye neza",
       "error": {
         "invalid": "Ibyangombwa ntabwo ari byo",
         "suspended": "Konti yahagaritswe"

@@ -1,7 +1,7 @@
 # Event Locator App Backend
 
 ## Project Description
-
+### Link to the Video: [here](https://www.youtube.com/watch?v=qIW2pTM0zEs)
 The Event Locator App is a multi-user backend system built with Node.js and Express.js, leveraging PostgreSQL with PostGIS for geospatial data handling. This project enables users to discover and manage events based on location and personal preferences. It incorporates authentication, location-based search, event categorization, multilingual support, and a notification system. The project also includes robust error handling, security best practices, and unit testing to ensure reliability and maintainability.
 
 ## Features
@@ -138,5 +138,5 @@ The Event Locator App is a multi-user backend system built with Node.js and Expr
 
 **Author:** Albertine INGABIRE
 
-## Here is LINK to the DEMO video:
+## Click[Postman Documentation](https://documenter.getpostman.com/view/41987133/2sB2cUB3eg) to endpoints testing 
 
